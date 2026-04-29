@@ -1,0 +1,116 @@
+version: '3.8'
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  auth-service:
+    build:
+      context: ./auth_service
+      dockerfile: Dockerfile
+    container_name: auth-service
+    ports:
+      - "8000:8000"
+    environment:
+      APP_NAME: auth-service
+      ENV: production
+      JWT_SECRET: ${AUTH_JWT_SECRET}
+      JWT_ALG: ${AUTH_JWT_ALG}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${AUTH_ACCESS_TOKEN_EXPIRE_MINUTES}
+      SQLITE_PATH: /data/auth.db
+    volumes:
+      - auth_data:/data
+    restart: unless-stopped
+
+  celery-worker:
+    build:
+      context: ./bot_service
+      dockerfile: Dockerfile
+    container_name: celery-worker
+    command: ["uv", "run", "celery", "-A", "app.infra.celery_app", "worker", "--loglevel=info"]
+    environment:
+      APP_NAME: bot-service
+      ENV: production
+      TELEGRAM_BOT_TOKEN: ${BOT_TELEGRAM_TOKEN}
+      JWT_SECRET: ${BOT_JWT_SECRET}
+      JWT_ALG: ${BOT_JWT_ALG}
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672//
+      OPENROUTER_API_KEY: ${BOT_OPENROUTER_API_KEY}
+      OPENROUTER_BASE_URL: https://openrouter.ai/api/v1
+      OPENROUTER_MODEL: ${BOT_OPENROUTER_MODEL}
+      OPENROUTER_SITE_URL: https://example.com
+      OPENROUTER_APP_NAME: bot-service
+      MT_PROTO_PROXY_HOST:
+      MT_PROTO_PROXY_PORT:
+      MT_PROTO_PROXY_SECRET:
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  bot-service:
+    build:
+      context: ./bot_service
+      dockerfile: Dockerfile
+    container_name: bot-service
+    environment:
+      APP_NAME: bot-service
+      ENV: production
+      TELEGRAM_BOT_TOKEN: ${BOT_TELEGRAM_TOKEN}
+      JWT_SECRET: ${BOT_JWT_SECRET}
+      JWT_ALG: ${BOT_JWT_ALG}
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672//
+      OPENROUTER_API_KEY: ${BOT_OPENROUTER_API_KEY}
+      OPENROUTER_BASE_URL: https://openrouter.ai/api/v1
+      OPENROUTER_MODEL: ${BOT_OPENROUTER_MODEL}
+      OPENROUTER_SITE_URL: https://example.com
+      OPENROUTER_APP_NAME: bot-service
+      MT_PROTO_PROXY_HOST:
+      MT_PROTO_PROXY_PORT:
+      MT_PROTO_PROXY_SECRET:
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  rabbitmq_data:
+  redis_data:
+  auth_data:
