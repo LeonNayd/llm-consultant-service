@@ -109,7 +109,7 @@ llm-consultant-service/
 │
 ├── docker-compose.yml             # Оркестрация всех сервисов
 ├── .env                    # Переменные окружения для Docker
-└── README.md                      # Этот файл
+└── README.md
 ```
 
 ---
@@ -137,7 +137,7 @@ cd llm-consultant-service
 
 2. **Настройте переменные окружения:**
 ```bash
-cp .env.docker .env
+cp .env
 ```
 
 Отредактируйте `.env`:
